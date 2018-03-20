@@ -40,6 +40,7 @@ static unsigned char esc = 0x1b;
 static unsigned int loadState = 0x0;
 static unsigned int shedState = 0x0;
 static SemaphoreHandle_t loadStateSem;
+static SemaphoreHandle_t currentStateSem;
 
 typedef enum {
 	NORMAL, MANAGED, MAINENANCE
@@ -183,6 +184,8 @@ double inline absoluteVal(double val) {
 	if(val < 0) return -val; else return val;
 }
 
+// Frequency ISR
+// Modifies: currentState, frequencyQueue, deltaFrequencyQueue
 void freqIsr(){
 	unsigned int samples;
 	double freq;
@@ -198,8 +201,9 @@ void freqIsr(){
 		hasLastFrequency = 1;
 	}
 
+        // Get the currentState sem
+        xSemaphoreTakeFromISR(currentStateSem, 1000);
 	if(currentState == MANAGED) {
-		/* TODO: These clause could be refractored */
 		// We need to check the timer
 		if(freq < unstableInstantThreshold || deltaFreq > unstableThreshold) {
 			// Its unstable
@@ -237,6 +241,7 @@ void freqIsr(){
 		fprintf(fp, "%c%sMAINTEANCE\n", esc, "[2J");
 		break;
 	}
+        xSemaphoreTakeGiveISR(currentStateSem);
 	return;
 }
 
@@ -334,6 +339,7 @@ void userSwitchMonitorTask(void *param) {
 		xSemaphoreTake(loadStateSem, 1000);
 		switch(currentState) {
 		case NORMAL:
+		case MAINENANCE:
 			// Normal operating state, userState is effective
 			loadState = usrState;
 			shedState = 0x0;
@@ -345,9 +351,6 @@ void userSwitchMonitorTask(void *param) {
 				loadState = usrState;
 			}
 			break;
-		case MAINENANCE:
-			// TODO: Implement mt state
-			break;
 		}
 		xSemaphoreGive(loadStateSem);
 		vTaskDelay(100);
@@ -358,14 +361,24 @@ void userSwitchMonitorTask(void *param) {
 void pushButtonIsr() {
 	IOWR_ALTERA_AVALON_PIO_IRQ_MASK(PUSH_BUTTON_BASE, 0x7); //enable interrupt for all three push buttons (Keys 1-3 -> bits 0-2)
 	IOWR_ALTERA_AVALON_PIO_EDGE_CAP(PUSH_BUTTON_BASE, 0x7); //write 1 to edge capture to clear pending interrupts
+        xSemaphoreTake(currentStateSem, 1000);
+        if(currentState == MAINENANCE) {
+            currentState = NORMAL;
+            xTimerStart(timer);
+        } else {
+            currentState = MAINENANCE;
+            xTimerStop(timer, 0);
+        }
+        xSemaphoreGive(currentStateSem);
 	return;
 }
 
 int main()
 {
-    // Setup
+        // Setup
         loadState = IORD_ALTERA_AVALON_PIO_DATA(SLIDE_SWITCH_BASE) & EFFECTIVE_SWITCHES_MASK;
         IOWR_ALTERA_AVALON_PIO_DATA(RED_LEDS_BASE, loadState);
+	IOWR_ALTERA_AVALON_PIO_EDGE_CAP(PUSH_BUTTON_BASE, 0x7); //write 1 to edge capture to clear pending interrupts
 
         // Create the necessary data structures
         frequencyQueue = xQueueCreate(FREQUENCY_QUEUE_SIZE, sizeof(double));
@@ -374,6 +387,7 @@ int main()
         deltaFrequencyQueue_out = xQueueCreate(FREQUENCY_QUEUE_SIZE, sizeof(double));
         eventQueue = xQueueCreate(FREQUENCY_QUEUE_SIZE, sizeof(EventT));
         loadStateSem = xSemaphoreCreateBinary();
+        currentStateSem = xSemaphoreCreateBinary();
 	fp = fopen(CHARACTER_LCD_NAME, "w"); //open the character LCD as a file stream for write
 
     // Setup timers
