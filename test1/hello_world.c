@@ -363,17 +363,17 @@ void pushButtonIsr() {
 
 int main()
 {
-	// Setup
-	loadState = userState = IORD_ALTERA_AVALON_PIO_DATA(SLIDE_SWITCH_BASE) & EFFECTIVE_SWITCHES_MASK;
-	IOWR_ALTERA_AVALON_PIO_DATA(RED_LEDS_BASE, loadState);
+    // Setup
+        loadState = IORD_ALTERA_AVALON_PIO_DATA(SLIDE_SWITCH_BASE) & EFFECTIVE_SWITCHES_MASK;
+        IOWR_ALTERA_AVALON_PIO_DATA(RED_LEDS_BASE, loadState);
 
-	// Create the necessary data structures
-    frequencyQueue = xQueueCreate(FREQUENCY_QUEUE_SIZE, sizeof(double));
-    deltaFrequencyQueue = xQueueCreate(FREQUENCY_QUEUE_SIZE, sizeof(double));
-    frequencyQueue_out = xQueueCreate(FREQUENCY_QUEUE_SIZE, sizeof(double));
-    deltaFrequencyQueue_out = xQueueCreate(FREQUENCY_QUEUE_SIZE, sizeof(double));
-    eventQueue = xQueueCreate(FREQUENCY_QUEUE_SIZE, sizeof(EventT));
-    loadStateSem = xSemaphoreCreateBinary();
+        // Create the necessary data structures
+        frequencyQueue = xQueueCreate(FREQUENCY_QUEUE_SIZE, sizeof(double));
+        deltaFrequencyQueue = xQueueCreate(FREQUENCY_QUEUE_SIZE, sizeof(double));
+        frequencyQueue_out = xQueueCreate(FREQUENCY_QUEUE_SIZE, sizeof(double));
+        deltaFrequencyQueue_out = xQueueCreate(FREQUENCY_QUEUE_SIZE, sizeof(double));
+        eventQueue = xQueueCreate(FREQUENCY_QUEUE_SIZE, sizeof(EventT));
+        loadStateSem = xSemaphoreCreateBinary();
 	fp = fopen(CHARACTER_LCD_NAME, "w"); //open the character LCD as a file stream for write
 
     // Setup timers
