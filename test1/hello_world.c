@@ -297,7 +297,9 @@ void eventConsumerTask(void* param) {
 			switch(event) {
 			case UNSHED:
 				if(tryTurnOnLoad()) {
+                                        xSemaphoreTake(currentStateSem, 1000);
 					currentState = NORMAL;
+                                        xSemaphoreGive(currentStateSem);
 					xTimerStop(timer, 0);
 				}
 				break;
