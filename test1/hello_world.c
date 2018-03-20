@@ -38,7 +38,6 @@ static unsigned char esc = 0x1b;
 
 #define EFFECTIVE_SWITCHES_MASK 0x1F // 5 loads
 static unsigned int loadState = 0x0;
-static unsigned int userState = 0x0;
 static unsigned int shedState = 0x0;
 static SemaphoreHandle_t loadStateSem;
 
@@ -330,20 +329,20 @@ void updateLEDTask(void *param) {
 void userSwitchMonitorTask(void *param) {
 	for(;;) {
 		// Read the slide switches and save it
-		userState = IORD_ALTERA_AVALON_PIO_DATA(SLIDE_SWITCH_BASE) & EFFECTIVE_SWITCHES_MASK;
+                unsigned int usrState = IORD_ALTERA_AVALON_PIO_DATA(SLIDE_SWITCH_BASE) & EFFECTIVE_SWITCHES_MASK;
 		// Lock the loadState
 		xSemaphoreTake(loadStateSem, 1000);
 		switch(currentState) {
 		case NORMAL:
 			// Normal operating state, userState is effective
-			loadState = userState;
+			loadState = usrState;
 			shedState = 0x0;
 			break;
 		case MANAGED:
 			// Managed state, only switching off is effective
-			if(userState < loadState) {
+			if(usrState < loadState) {
 				// User Switching shit off, we should allow them
-				loadState = userState;
+				loadState = usrState;
 			}
 			break;
 		case MAINENANCE:
