@@ -134,7 +134,7 @@ void GUITask(void *pvParameters){
 		}
 		i = savedI;
 		while(uxQueueMessagesWaiting(deltaFrequencyQueue) != 0){
-			xQueueReceive(deltaFrequencyQueue, dfreq+j, 0);
+			xQueueReceive(deltaFrequencyQueue, dfreq+i, 0);
 			i = ++i % 100;
 		}
 
@@ -181,11 +181,12 @@ void freqIsr(){
 	double freq;
 	samples = IORD(FREQUENCY_ANALYSER_BASE, 0);
 	freq = SAMPLE_RATE / (double)samples;
-	xQueueSendToBackFromISR(frequencyQueue, &freq, pdFALSE);
 	if(hasLastFrequency) {
 		// We can calculate the delta frequency
-		deltaFreq = (freq - lastFreq) * 2.0 * freq * lastFreq / (freq + lastFreq);
-		xQueueSendToBackFromISR(deltaFrequencyQueue, &freq, pdFALSE);
+		//deltaFreq = (freq - lastFreq) * 2.0 * freq * lastFreq / (freq + lastFreq);
+		deltaFreq = lastFreq - freq;
+		xQueueSendToBackFromISR(frequencyQueue, &freq, pdFALSE);
+		xQueueSendToBackFromISR(deltaFrequencyQueue, &deltaFreq, pdFALSE);
 	} else {
 		lastFreq = freq;
 		hasLastFrequency = 1;
