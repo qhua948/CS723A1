@@ -6,6 +6,7 @@
 #include "system.h"
 #include "sys/alt_irq.h"
 #include "io.h"
+#include "altera_up_avalon_ps2.h"
 #include "altera_avalon_pio_regs.h"
 #include "FreeRTOS/FreeRTOS.h"
 #include "FreeRTOS/task.h"
@@ -56,7 +57,7 @@ static Stability lastStability = UNSTABLE;
 
 static double deltaFreq;
 static double unstableThreshold = 0.5f;
-#define unstableInstantThreshold 40
+#define unstableInstantThreshold 49
 
 //For frequency plot
 #define FREQPLT_ORI_X 101		//x axis pixel position at the plot origin
@@ -84,6 +85,7 @@ typedef struct Line_S{
 /****** VGA display ******/
 
 void GUITask(void *pvParameters){
+	//initialize
 	//initialize VGA controllers
 	alt_up_pixel_buffer_dma_dev *pixel_buf;
 	pixel_buf = alt_up_pixel_buffer_dma_open_dev(VIDEO_PIXEL_BUFFER_DMA_NAME);
@@ -183,8 +185,9 @@ void freqIsr(){
 	freq = SAMPLE_RATE / (double)samples;
 	if(hasLastFrequency) {
 		// We can calculate the delta frequency
-		//deltaFreq = (freq - lastFreq) * 2.0 * freq * lastFreq / (freq + lastFreq);
-		deltaFreq = lastFreq - freq;
+		deltaFreq = (freq - lastFreq) * 2.0 * freq * lastFreq / (freq + lastFreq);
+//		deltaFreq = lastFreq - freq;
+		lastFreq = freq;
 		xQueueSendToBackFromISR(frequencyQueue, &freq, pdFALSE);
 		xQueueSendToBackFromISR(deltaFrequencyQueue, &deltaFreq, pdFALSE);
 	} else {
@@ -377,6 +380,13 @@ void userSwitchMonitorTask(void *param) {
 }
 
 // TODO: Maintenance
+void ps2_isr(void* ps2_device, alt_u32 id){
+	unsigned char byte;
+	alt_up_ps2_read_data_byte_timeout(ps2_device, &byte);
+	printf("Scan code: %x\n", byte);
+}
+
+
 void pushButtonIsr() {
 	xQueueSendToBackFromISR(eventQueue, &MAINTAIN_EVENT, 0);
 	IOWR_ALTERA_AVALON_PIO_EDGE_CAP(PUSH_BUTTON_BASE, 0x7); //write 1 to clear all detected falling edges
@@ -401,6 +411,8 @@ int main()
 	IOWR_ALTERA_AVALON_PIO_DATA(RED_LEDS_BASE, loadState);
 	IOWR_ALTERA_AVALON_PIO_IRQ_MASK(PUSH_BUTTON_BASE, 0x7); //enable interrupt for all three push buttons (Keys 1-3 -> bits 0-2)
 	IOWR_ALTERA_AVALON_PIO_EDGE_CAP(PUSH_BUTTON_BASE, 0x7); //write 1 to edge capture to clear pending interrupts
+	alt_up_ps2_dev * ps2_device = alt_up_ps2_open_dev(PS2_NAME);
+	alt_up_ps2_enable_read_interrupt(ps2_device);
 
 	// Create the necessary data structures
 	frequencyQueue = xQueueCreate(FREQUENCY_QUEUE_SIZE, sizeof(double));
@@ -418,6 +430,7 @@ int main()
     // Register the ISRs
 	alt_irq_register(FREQUENCY_ANALYSER_IRQ, 0, freqIsr);
 	alt_irq_register(PUSH_BUTTON_IRQ, 1, pushButtonIsr);
+	alt_irq_register(PS2_IRQ, ps2_device, ps2_isr);
 
     // Create Tasks
 	//xTaskCreate(GUITask, "DrawTsk", configMINIMAL_STACK_SIZE, NULL, GUITask_P, &GUITask_H);
