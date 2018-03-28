@@ -7,6 +7,7 @@
 #include "sys/alt_irq.h"
 #include "io.h"
 #include "altera_up_avalon_ps2.h"
+#include "altera_up_ps2_keyboard.h"
 #include "altera_avalon_pio_regs.h"
 #include "FreeRTOS/FreeRTOS.h"
 #include "FreeRTOS/task.h"
@@ -381,10 +382,37 @@ void userSwitchMonitorTask(void *param) {
 
 // TODO: Maintenance
 void ps2_isr(void* ps2_device, alt_u32 id){
-	unsigned char byte;
-	alt_up_ps2_read_data_byte_timeout(ps2_device, &byte);
-	printf("Scan code: %x\n", byte);
-}
+//	unsigned char byte;
+//	alt_up_ps2_read_data_byte(ps2_device, &byte);
+	char ascii;
+	int status = 0;
+	unsigned char key = 0;
+	KB_CODE_TYPE decode_mode;
+	status = decode_scancode(ps2_device, &decode_mode , &key , &ascii);
+	  if ( status == 0 ) //success
+	  {
+	    // print out the result
+	    switch ( decode_mode )
+	    {
+	      case KB_ASCII_MAKE_CODE :
+	        printf ( "ASCII   : %c\n", ascii ) ;
+	        break ;
+	      case KB_LONG_BINARY_MAKE_CODE :
+	        // do nothing
+	      case KB_BINARY_MAKE_CODE :
+	        printf ( "MAKE CODE : %x\n", key ) ;
+	        break ;
+	      case KB_BREAK_CODE :
+	        // do nothing
+	      default :
+	        printf ( "DEFAULT   : %x\n", key ) ;
+	        break ;
+	    }
+	    IOWR(SEVEN_SEG_BASE,1 ,key);
+	  }
+	return;
+	}
+
 
 
 void pushButtonIsr() {
@@ -413,6 +441,8 @@ int main()
 	IOWR_ALTERA_AVALON_PIO_EDGE_CAP(PUSH_BUTTON_BASE, 0x7); //write 1 to edge capture to clear pending interrupts
 	alt_up_ps2_dev * ps2_device = alt_up_ps2_open_dev(PS2_NAME);
 	alt_up_ps2_enable_read_interrupt(ps2_device);
+	alt_up_ps2_clear_fifo (ps2_device);
+
 
 	// Create the necessary data structures
 	frequencyQueue = xQueueCreate(FREQUENCY_QUEUE_SIZE, sizeof(double));
