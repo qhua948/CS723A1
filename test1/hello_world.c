@@ -1,7 +1,10 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <math.h>
 #include "altera_up_avalon_video_character_buffer_with_dma.h"
+#include "altera_up_ps2_keyboard.h"
+#include "altera_up_avalon_ps2.h"
 #include "altera_up_avalon_video_pixel_buffer_dma.h"
 #include "system.h"
 #include "sys/alt_irq.h"
@@ -34,6 +37,9 @@ static unsigned int shedState = 0x0;
 static SemaphoreHandle_t loadStateSem;
 static SemaphoreHandle_t currentStateSem;
 
+static unsigned short ps2ISRState = 2;
+static float usrps2InputBuf = .0;
+
 typedef enum {
 	NORMAL, MANAGED, MAINENANCE
 } OperatingState;
@@ -55,8 +61,8 @@ static Stability lastStability = UNSTABLE;
 
 
 static double deltaFreq;
-static double unstableThreshold = 0.5f;
-#define unstableInstantThreshold 40
+static double unstableThreshold = 10.5f;
+#define unstableInstantThreshold 49
 
 //For frequency plot
 #define FREQPLT_ORI_X 101		//x axis pixel position at the plot origin
@@ -84,6 +90,9 @@ typedef struct Line_S{
 /****** VGA display ******/
 
 void GUITask(void *pvParameters){
+	static char freqStrBuf[10];
+	static char rocStrBuf[10];
+	static char thresholdStrBuf[10];
 	//initialize VGA controllers
 	alt_up_pixel_buffer_dma_dev *pixel_buf;
 	pixel_buf = alt_up_pixel_buffer_dma_open_dev(VIDEO_PIXEL_BUFFER_DMA_NAME);
@@ -119,6 +128,12 @@ void GUITask(void *pvParameters){
 	alt_up_char_buffer_string(char_buf, "-30", 9, 34);
 	alt_up_char_buffer_string(char_buf, "-60", 9, 36);
 
+	alt_up_char_buffer_string(char_buf, "Frequency", 8, 40);
+	alt_up_char_buffer_string(char_buf, "RoC", 8, 42);
+	alt_up_char_buffer_string(char_buf, "RoC Threshold", 30, 40);
+	alt_up_char_buffer_string(char_buf, "System Status", 30, 42);
+
+
 
 	double freq[100], dfreq[100];
 	int i = 0, j = 0;
@@ -137,6 +152,27 @@ void GUITask(void *pvParameters){
 			xQueueReceive(deltaFrequencyQueue, dfreq+i, 0);
 			i = ++i % 100;
 		}
+
+		switch(currentState) {
+		case NORMAL:
+			alt_up_char_buffer_string(char_buf, "NORMAL      ", 45, 42);
+			break;
+		case MANAGED:
+			alt_up_char_buffer_string(char_buf, "MANAGED     ", 45, 42);
+			break;
+		case MAINENANCE:
+			alt_up_char_buffer_string(char_buf, "MAINTEANENCE", 45, 42);
+			break;
+		}
+
+		sprintf(freqStrBuf, "%.2f", *(freq+savedI));
+		sprintf(rocStrBuf, "%.2f",  *(dfreq+savedI));
+		sprintf(thresholdStrBuf, "%.2f",  unstableThreshold);
+		//printf("%.2f\n", unstableThreshold);
+		alt_up_char_buffer_string(char_buf, "            ", 45, 40);
+		alt_up_char_buffer_string(char_buf, freqStrBuf, 20, 40);
+		alt_up_char_buffer_string(char_buf, rocStrBuf, 20, 42);
+		alt_up_char_buffer_string(char_buf, thresholdStrBuf, 45, 40);
 
 
 		//clear old graph to draw new graph
@@ -183,10 +219,11 @@ void freqIsr(){
 	freq = SAMPLE_RATE / (double)samples;
 	if(hasLastFrequency) {
 		// We can calculate the delta frequency
-		//deltaFreq = (freq - lastFreq) * 2.0 * freq * lastFreq / (freq + lastFreq);
-		deltaFreq = lastFreq - freq;
+		deltaFreq = (freq - lastFreq) * 2.0 * freq * lastFreq / (freq + lastFreq);
+		//deltaFreq = (lastFreq - freq);// / ((double)samples / SAMPLE_RATE);
 		xQueueSendToBackFromISR(frequencyQueue, &freq, pdFALSE);
 		xQueueSendToBackFromISR(deltaFrequencyQueue, &deltaFreq, pdFALSE);
+		lastFreq = freq;
 	} else {
 		lastFreq = freq;
 		hasLastFrequency = 1;
@@ -376,7 +413,6 @@ void userSwitchMonitorTask(void *param) {
 	}
 }
 
-// TODO: Maintenance
 void pushButtonIsr() {
 	xQueueSendToBackFromISR(eventQueue, &MAINTAIN_EVENT, 0);
 	IOWR_ALTERA_AVALON_PIO_EDGE_CAP(PUSH_BUTTON_BASE, 0x7); //write 1 to clear all detected falling edges
@@ -394,6 +430,73 @@ void pushButtonIsr() {
 	return;
 }
 
+static unsigned short afterDec = 0;
+static unsigned int decPt = 0;
+
+
+void ps2_isr(void* ps2_device, alt_u32 id){
+	//unsigned char byte;
+	//alt_up_ps2_read_data_byte(ps2_device, &byte);
+	char ascii;
+	int status = 0;
+	unsigned char key = 0;
+	KB_CODE_TYPE decode_mode;
+	status = decode_scancode(ps2_device, &decode_mode , &key , &ascii);
+	if(!ps2ISRState) {
+		printf("%d\n", ps2ISRState);
+		ps2ISRState++;
+	} else {
+		printf("%d\n", ps2ISRState);
+		ps2ISRState = (ps2ISRState + 1) % 3;
+		return;
+	}
+
+	char offsetChar = ascii - 48;
+
+	if(key == 0x5a) {
+		unstableThreshold = usrps2InputBuf / (pow(10, decPt));
+		usrps2InputBuf = .0;
+		afterDec = 0;
+		decPt = 0;
+	} else if(key == 0x71 || key == 0x49){
+		// dot
+		afterDec = 1;
+	} else if(offsetChar >= 0 && offsetChar < 10) {
+		// num
+		if(afterDec) {
+			decPt++;
+		}
+		usrps2InputBuf *= 10;
+		usrps2InputBuf += (int)offsetChar;
+	}
+
+	printf("usr : %f\n", usrps2InputBuf);
+	printf("stat : %f\n", unstableThreshold);
+
+	  if ( status == 0 ) //success
+	  {
+	    // print out the result
+	    switch ( decode_mode )
+	    {
+	      case KB_ASCII_MAKE_CODE :
+	        printf ( "ASCII   : %c\n", ascii ) ;
+	        break ;
+	      case KB_LONG_BINARY_MAKE_CODE :
+	        // do nothing
+	      case KB_BINARY_MAKE_CODE :
+	        printf ( "MAKE CODE : %x\n", key ) ;
+	        break ;
+	      case KB_BREAK_CODE :
+	        // do nothing
+	      default :
+	        printf ( "DEFAULT   : %x\n", key ) ;
+	        break ;
+	    }
+	    IOWR(SEVEN_SEG_BASE,0 ,key);
+	  }
+	return;
+}
+
 int main()
 {
 	// Setup
@@ -401,6 +504,9 @@ int main()
 	IOWR_ALTERA_AVALON_PIO_DATA(RED_LEDS_BASE, loadState);
 	IOWR_ALTERA_AVALON_PIO_IRQ_MASK(PUSH_BUTTON_BASE, 0x7); //enable interrupt for all three push buttons (Keys 1-3 -> bits 0-2)
 	IOWR_ALTERA_AVALON_PIO_EDGE_CAP(PUSH_BUTTON_BASE, 0x7); //write 1 to edge capture to clear pending interrupts
+	alt_up_ps2_dev * ps2_device = alt_up_ps2_open_dev(PS2_NAME);
+	alt_up_ps2_enable_read_interrupt(ps2_device);
+	alt_up_ps2_clear_fifo (ps2_device);
 
 	// Create the necessary data structures
 	frequencyQueue = xQueueCreate(FREQUENCY_QUEUE_SIZE, sizeof(double));
@@ -418,6 +524,7 @@ int main()
     // Register the ISRs
 	alt_irq_register(FREQUENCY_ANALYSER_IRQ, 0, freqIsr);
 	alt_irq_register(PUSH_BUTTON_IRQ, 1, pushButtonIsr);
+	alt_irq_register(PS2_IRQ, ps2_device, ps2_isr);
 
     // Create Tasks
 	//xTaskCreate(GUITask, "DrawTsk", configMINIMAL_STACK_SIZE, NULL, GUITask_P, &GUITask_H);

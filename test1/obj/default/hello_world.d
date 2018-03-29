@@ -5,6 +5,9 @@ obj/default/hello_world.o: hello_world.c \
   ../test1_bsp//HAL/inc/sys/alt_llist.h \
   ../test1_bsp//HAL/inc/priv/alt_dev_llist.h \
   ../test1_bsp//HAL/inc/sys/alt_llist.h \
+  ../test1_bsp//drivers/inc/altera_up_ps2_keyboard.h \
+  ../test1_bsp//drivers/inc/altera_up_avalon_ps2.h \
+  ../test1_bsp//drivers/inc/altera_up_avalon_ps2.h \
   ../test1_bsp//drivers/inc/altera_up_avalon_video_pixel_buffer_dma.h \
   ../test1_bsp/system.h ../test1_bsp//HAL/inc/sys/alt_irq.h \
   ../test1_bsp//HAL/inc/nios2.h \
@@ -35,6 +38,12 @@ obj/default/hello_world.o: hello_world.c \
 ../test1_bsp//HAL/inc/priv/alt_dev_llist.h:
 
 ../test1_bsp//HAL/inc/sys/alt_llist.h:
+
+../test1_bsp//drivers/inc/altera_up_ps2_keyboard.h:
+
+../test1_bsp//drivers/inc/altera_up_avalon_ps2.h:
+
+../test1_bsp//drivers/inc/altera_up_avalon_ps2.h:
 
 ../test1_bsp//drivers/inc/altera_up_avalon_video_pixel_buffer_dma.h:
 
