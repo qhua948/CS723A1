@@ -1,13 +1,15 @@
 #include <stdio.h>
 #include <unistd.h>
+#include <stdbool.h>
 #include <stdlib.h>
+#include <math.h>
 #include "altera_up_avalon_video_character_buffer_with_dma.h"
+#include "altera_up_ps2_keyboard.h"
+#include "altera_up_avalon_ps2.h"
 #include "altera_up_avalon_video_pixel_buffer_dma.h"
 #include "system.h"
 #include "sys/alt_irq.h"
 #include "io.h"
-#include "altera_up_avalon_ps2.h"
-#include "altera_up_ps2_keyboard.h"
 #include "altera_avalon_pio_regs.h"
 #include "FreeRTOS/FreeRTOS.h"
 #include "FreeRTOS/task.h"
@@ -36,6 +38,13 @@ static unsigned int shedState = 0x0;
 static SemaphoreHandle_t loadStateSem;
 static SemaphoreHandle_t currentStateSem;
 
+static unsigned short ps2ISRState = 2;
+static float usrps2InputBuf = .0;
+
+TickType_t xTime1, xTime2, xTime3;
+int tst = 0;
+
+
 typedef enum {
 	NORMAL, MANAGED, MAINENANCE
 } OperatingState;
@@ -57,7 +66,7 @@ static Stability lastStability = UNSTABLE;
 
 
 static double deltaFreq;
-static double unstableThreshold = 0.5f;
+static double unstableThreshold = 10.5f;
 #define unstableInstantThreshold 49
 
 //For frequency plot
@@ -75,6 +84,14 @@ static double unstableThreshold = 0.5f;
 
 #define GUITask_P      (tskIDLE_PRIORITY+1)
 
+//Linked list for Time Values
+struct node {
+   int data;
+   int key;
+
+   struct node *next;
+   struct node *prev;
+};
 
 typedef struct Line_S{
 	unsigned int x1;
@@ -83,10 +100,160 @@ typedef struct Line_S{
 	unsigned int y2;
 } Line;
 
+
+struct node *head = NULL;
+struct node *last = NULL;
+struct node *high = NULL;
+struct node *low = NULL;
+struct node *current = NULL;
+
+//is list empty
+bool isEmpty() {
+   return head == NULL;
+}
+
+int length() {
+   int length = 0;
+   struct node *current;
+
+   for(current = head; current != NULL; current = current->next){
+      length++;
+   }
+
+   return length;
+}
+
+//display the list from last to first
+void displayBackward() {
+
+   //start from the last
+   struct node *ptr = last;
+
+   //navigate till the start of the list
+   printf("\n[ ");
+
+   while(ptr != NULL) {
+
+      //print data
+      printf("(%d,%d) ",ptr->key,ptr->data);
+
+      //move to next item
+      ptr = ptr ->prev;
+
+   }
+
+
+}
+int getFirst() {
+	int frstValue;
+	//start from the first
+	struct node *ptr = head;
+	frstValue = ptr->data;
+	return frstValue;
+}
+
+
+
+//insert link at the first location
+void insertFirst(int key, int data) {
+
+   //create a link
+   struct node *link = (struct node*) malloc(sizeof(struct node));
+   link->key = key;
+   link->data = data;
+
+   if(isEmpty()) {
+      //make it the last link
+      last = link;
+   } else {
+      //update first prev link
+      head->prev = link;
+   }
+
+   //point it to old first link
+   link->next = head;
+
+   //point first to new first link
+   head = link;
+}
+
+//insert link at the last location
+void insertLast(int key, int data) {
+
+   //create a link
+   struct node *link = (struct node*) malloc(sizeof(struct node));
+   link->key = key;
+   link->data = data;
+
+   if(isEmpty()) {
+      //make it the last link
+      last = link;
+   } else {
+      //make link a new last link
+      last->next = link;
+
+      //mark old last node as prev of new link
+      link->prev = last;
+   }
+
+   //point last to new last node
+   last = link;
+}
+
+//delete a link with given key
+
+struct node* delete(int key) {
+
+   //start from the first link
+   struct node* current = head;
+   struct node* previous = NULL;
+
+   //if list is empty
+   if(head == NULL) {
+      return NULL;
+   }
+
+   //navigate through list
+   while(current->key != key) {
+      //if it is last node
+
+      if(current->next == NULL) {
+         return NULL;
+      } else {
+         //store reference to current link
+         previous = current;
+
+         //move to next link
+         current = current->next;
+      }
+   }
+
+   //found a match, update the link
+   if(current == head) {
+      //change first to point to next link
+      head = head->next;
+   } else {
+      //bypass the current link
+      current->prev->next = current->next;
+   }
+
+   if(current == last) {
+      //change last to point to prev link
+      last = current->prev;
+   } else {
+      current->next->prev = current->prev;
+   }
+
+   return current;
+}
+
 /****** VGA display ******/
 
 void GUITask(void *pvParameters){
-	//initialize
+	static char timerStrBuf[10];
+	static char freqStrBuf[10];
+	static char rocStrBuf[10];
+	static char thresholdStrBuf[10];
 	//initialize VGA controllers
 	alt_up_pixel_buffer_dma_dev *pixel_buf;
 	pixel_buf = alt_up_pixel_buffer_dma_open_dev(VIDEO_PIXEL_BUFFER_DMA_NAME);
@@ -122,6 +289,13 @@ void GUITask(void *pvParameters){
 	alt_up_char_buffer_string(char_buf, "-30", 9, 34);
 	alt_up_char_buffer_string(char_buf, "-60", 9, 36);
 
+	alt_up_char_buffer_string(char_buf, "Frequency", 8, 40);
+	alt_up_char_buffer_string(char_buf, "RoC", 8, 42);
+	alt_up_char_buffer_string(char_buf, "RoC Threshold", 30, 40);
+	alt_up_char_buffer_string(char_buf, "System Status", 30, 42);
+	alt_up_char_buffer_string(char_buf, "Last Time", 40, 50);
+
+
 
 	double freq[100], dfreq[100];
 	int i = 0, j = 0;
@@ -140,6 +314,30 @@ void GUITask(void *pvParameters){
 			xQueueReceive(deltaFrequencyQueue, dfreq+i, 0);
 			i = ++i % 100;
 		}
+
+		switch(currentState) {
+		case NORMAL:
+			alt_up_char_buffer_string(char_buf, "NORMAL      ", 45, 42);
+			break;
+		case MANAGED:
+			alt_up_char_buffer_string(char_buf, "MANAGED     ", 45, 42);
+			break;
+		case MAINENANCE:
+			alt_up_char_buffer_string(char_buf, "MAINTEANENCE", 45, 42);
+			break;
+		}
+
+		sprintf(freqStrBuf, "%.2f", *(freq+savedI));
+		sprintf(rocStrBuf, "%.2f",  *(dfreq+savedI));
+		sprintf(thresholdStrBuf, "%.2f",  unstableThreshold);
+		//last 5 timer values
+		sprintf(timerStrBuf, "%d ", getFirst());
+		//printf("%.2f\n", unstableThreshold);
+		alt_up_char_buffer_string(char_buf, "            ", 45, 40);
+		alt_up_char_buffer_string(char_buf, freqStrBuf, 20, 40);
+		alt_up_char_buffer_string(char_buf, rocStrBuf, 20, 42);
+		alt_up_char_buffer_string(char_buf, thresholdStrBuf, 45, 40);
+		alt_up_char_buffer_string(char_buf, timerStrBuf, 50, 50);
 
 
 		//clear old graph to draw new graph
@@ -187,10 +385,10 @@ void freqIsr(){
 	if(hasLastFrequency) {
 		// We can calculate the delta frequency
 		deltaFreq = (freq - lastFreq) * 2.0 * freq * lastFreq / (freq + lastFreq);
-//		deltaFreq = lastFreq - freq;
-		lastFreq = freq;
+		//deltaFreq = (lastFreq - freq);// / ((double)samples / SAMPLE_RATE);
 		xQueueSendToBackFromISR(frequencyQueue, &freq, pdFALSE);
 		xQueueSendToBackFromISR(deltaFrequencyQueue, &deltaFreq, pdFALSE);
+		lastFreq = freq;
 	} else {
 		lastFreq = freq;
 		hasLastFrequency = 1;
@@ -202,6 +400,8 @@ void freqIsr(){
 		// We need to check the timer
 		if(freq < unstableInstantThreshold || deltaFreq > unstableThreshold) {
 			// Its unstable
+
+//			printf("Unstable (Managed) : %d \n", (int)xTime1);
 			if(lastStability == STABLE) {
 				// Reset timer
 				xTimerResetFromISR(timer, NULL);
@@ -217,6 +417,8 @@ void freqIsr(){
 		}
 	} else if(currentState == NORMAL) {
 		if(freq < unstableInstantThreshold || deltaFreq > unstableThreshold) {
+			xTime1 = xTaskGetTickCount();
+			tst = 0;
 			// Normal state and unstable
 			currentState = MANAGED;
 			xTimerStartFromISR(timer, 0);
@@ -227,13 +429,13 @@ void freqIsr(){
 
 	switch(currentState) {
 	case NORMAL:
-		fprintf(fp, "%c%sNORMAL\n", esc, "[2J");
+		fprintf(fp, "%c%sNORMAL\nFreq:%.2f\n", esc, "[2J", unstableThreshold);
 		break;
 	case MANAGED:
-		fprintf(fp, "%c%sMANAGED\n", esc, "[2J");
+		fprintf(fp, "%c%sMANAGED\nFreq: %.2f\n", esc, "[2J", unstableThreshold);
 		break;
 	case MAINENANCE:
-		fprintf(fp, "%c%sMAINTEANCE\n", esc, "[2J");
+		fprintf(fp, "%c%sMAINTEANCE\nFreq:%.2f\n", esc, "[2J", unstableThreshold);
 		break;
 	}
         xSemaphoreGiveFromISR(currentStateSem, 0);
@@ -267,6 +469,7 @@ unsigned int tryTurnOnLoad() {
 
 // Analogous to tryTurnOnLoad(), thread safe
 void tryTurnOffLoad() {
+	//xTime3 = xTaskGetTickCount();
 	xSemaphoreTake(loadStateSem, 1000);
 	unsigned int maskedState = loadState & EFFECTIVE_SWITCHES_MASK;
 	if(maskedState != 0x0) {
@@ -276,6 +479,15 @@ void tryTurnOffLoad() {
 				loadState = maskedState ^ (0x1 << i);
 				shedState = shedState | (0x1 << i);
 				xSemaphoreGive(loadStateSem);
+				xTime3 = xTaskGetTickCount();
+//				int executiontime = ((int) xTime3 - (int) xTime1);
+				int executiontime = ((int) xTime3);
+				if (tst == 0) {
+					insertFirst(1, executiontime);
+					printf("Execution Time: %d ms \n", executiontime);
+					tst++;
+				} else { tst++; }
+
 				return;
 			}
 		}
@@ -380,15 +592,79 @@ void userSwitchMonitorTask(void *param) {
 	}
 }
 
-// TODO: Maintenance
+void pushButtonIsr() {
+	xQueueSendToBackFromISR(eventQueue, &MAINTAIN_EVENT, 0);
+	IOWR_ALTERA_AVALON_PIO_EDGE_CAP(PUSH_BUTTON_BASE, 0x7); //write 1 to clear all detected falling edges
+	/*
+        xSemaphoreTakeFromISR(currentStateSem, 1000);
+        if(currentState == MAINENANCE) {
+            currentState = NORMAL;
+            xTimerStart(timer, 10);
+        } else {
+            currentState = MAINENANCE;
+            xTimerStop(timer, 0);
+        }
+        xSemaphoreGiveFromISR(currentStateSem, 0);
+        */
+	return;
+}
+//int hexadecimal_to_decimal(int x)
+//{
+//      int decimal_number, remainder, count = 0;
+//      while(x > 0)
+//      {
+//            remainder = x % 10;
+//            decimal_number = decimal_number + remainder * pow(16, count);
+//            x = x / 10;
+//            count++;
+//      }
+//      return decimal_number;
+//}
+
+static unsigned short afterDec = 0;
+static unsigned int decPt = 0;
+
+
+
 void ps2_isr(void* ps2_device, alt_u32 id){
-//	unsigned char byte;
-//	alt_up_ps2_read_data_byte(ps2_device, &byte);
+	//unsigned char byte;
+	//alt_up_ps2_read_data_byte(ps2_device, &byte);
 	char ascii;
 	int status = 0;
 	unsigned char key = 0;
 	KB_CODE_TYPE decode_mode;
 	status = decode_scancode(ps2_device, &decode_mode , &key , &ascii);
+	if(!ps2ISRState) {
+		printf("%d\n", ps2ISRState);
+		ps2ISRState++;
+	} else {
+		printf("%d\n", ps2ISRState);
+		ps2ISRState = (ps2ISRState + 1) % 3;
+		return;
+	}
+
+	char offsetChar = ascii - 48;
+
+	if(key == 0x5a) {
+		unstableThreshold = usrps2InputBuf / (pow(10, decPt));
+		usrps2InputBuf = .0;
+		afterDec = 0;
+		decPt = 0;
+	} else if(key == 0x71 || key == 0x49){
+		// dot
+		afterDec = 1;
+	} else if(offsetChar >= 0 && offsetChar < 10) {
+		// num
+		if(afterDec) {
+			decPt++;
+		}
+		usrps2InputBuf *= 10;
+		usrps2InputBuf += (int)offsetChar;
+	}
+
+	printf("usr : %f\n", usrps2InputBuf);
+	printf("stat : %f\n", unstableThreshold);
+
 	  if ( status == 0 ) //success
 	  {
 	    // print out the result
@@ -408,29 +684,14 @@ void ps2_isr(void* ps2_device, alt_u32 id){
 	        printf ( "DEFAULT   : %x\n", key ) ;
 	        break ;
 	    }
-	    IOWR(SEVEN_SEG_BASE,1 ,key);
+//	    IOWR(SEVEN_SEG_BASE,0 , usrps2InputBuf);
+
 	  }
 	return;
-	}
-
-
-
-void pushButtonIsr() {
-	xQueueSendToBackFromISR(eventQueue, &MAINTAIN_EVENT, 0);
-	IOWR_ALTERA_AVALON_PIO_EDGE_CAP(PUSH_BUTTON_BASE, 0x7); //write 1 to clear all detected falling edges
-	/*
-        xSemaphoreTakeFromISR(currentStateSem, 1000);
-        if(currentState == MAINENANCE) {
-            currentState = NORMAL;
-            xTimerStart(timer, 10);
-        } else {
-            currentState = MAINENANCE;
-            xTimerStop(timer, 0);
-        }
-        xSemaphoreGiveFromISR(currentStateSem, 0);
-        */
-	return;
 }
+
+
+
 
 int main()
 {
@@ -442,7 +703,6 @@ int main()
 	alt_up_ps2_dev * ps2_device = alt_up_ps2_open_dev(PS2_NAME);
 	alt_up_ps2_enable_read_interrupt(ps2_device);
 	alt_up_ps2_clear_fifo (ps2_device);
-
 
 	// Create the necessary data structures
 	frequencyQueue = xQueueCreate(FREQUENCY_QUEUE_SIZE, sizeof(double));
@@ -469,6 +729,14 @@ int main()
 	xTaskCreate(updateLEDTask, "UpdateLEDTask", 4096, NULL, 30, NULL);
 	xTaskCreate(eventConsumerTask, "EventConsumerTask", 4096, NULL, 30, NULL);
 	xTaskCreate(GUITask, "GUITask", 8192, NULL, 29, NULL);
+
+//	insertFirst(1, 10);
+//	insertFirst(2, 20);
+//	insertFirst(3, 30);
+//	insertFirst(4, 1);
+//	insertFirst(5, 40);
+//	insertFirst(6, 56);
+//	displayBackward();
 
 	// Start the scheduler
 	vTaskStartScheduler();
