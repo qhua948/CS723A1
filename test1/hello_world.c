@@ -20,11 +20,13 @@
 #define Flash_Task_P (tskIDLE_PRIORITY+1)
 #define SAMPLE_RATE 16000
 #define FREQUENCY_QUEUE_SIZE 100
+#define TIME_QUEUE_SIZE 10 //LL
 
 static TimerHandle_t timer;
 static QueueHandle_t frequencyQueue;
 static QueueHandle_t deltaFrequencyQueue;
 static QueueHandle_t eventQueue;
+static QueueHandle_t timeQueue; //LL
 static QueueHandle_t frequencyQueue_out;
 static QueueHandle_t deltaFrequencyQueue_out;
 static double lastFreq = .0;
@@ -90,7 +92,7 @@ struct node {
    int key;
 
    struct node *next;
-   struct node *prev;
+//   struct node *prev;
 };
 
 typedef struct Line_S{
@@ -123,35 +125,74 @@ int length() {
    return length;
 }
 
-//display the list from last to first
-void displayBackward() {
-
+//display the list from first to last
+void displayList() {
+	printf("\nHead0: %d", head->data);
+	   printf("\nLast0: %d", last->data);
    //start from the last
-   struct node *ptr = last;
+   struct node *ptr = head;
 
    //navigate till the start of the list
    printf("\n[ ");
 
-   while(ptr != NULL) {
+   while(ptr != last) {
 
       //print data
       printf("(%d,%d) ",ptr->key,ptr->data);
 
       //move to next item
-      ptr = ptr ->prev;
+      ptr = ptr ->next;
 
    }
+   printf("(%d,%d)] ",last->key,last->data);
 
-
-}
-int getFirst() {
-	int frstValue;
-	//start from the first
-	struct node *ptr = head;
-	frstValue = ptr->data;
-	return frstValue;
+   printf("\nHigh: %d", high->data);
+   printf("\nLow: %d", low->data);
+   printf("\nHead: %d", head->data);
+   printf("\nLast: %d", last->data);
 }
 
+//Get last 5 values. Print on screen
+void displayList_5() {
+   //start from the last
+   struct node *ptr = head;
+
+   //navigate till the start of the list
+   printf("\nLast 5: [ ");
+   int i = 0;
+   while(ptr != last && i < 5) {
+
+      //print data
+      printf("(%d,%d) ",ptr->key,ptr->data);
+
+      //move to next item
+      ptr = ptr ->next;
+      i++;
+   }
+   //printf("(%d,%d)] ",last->key,last->data);
+   printf("] ");
+
+}
+
+
+void freeList() {
+
+   //start from the head
+   struct node *ptr = head;
+   struct node *followptr;
+
+   //navigate till the start of the list
+   printf("\n[ ");
+
+   while(ptr != last) {
+
+	  followptr = ptr;
+	  ptr = ptr->next;
+	  printf("\n Delete: %d", ptr->data);
+	  free(followptr);
+   }
+   head = NULL;
+}
 
 
 //insert link at the first location
@@ -165,9 +206,15 @@ void insertFirst(int key, int data) {
    if(isEmpty()) {
       //make it the last link
       last = link;
-   } else {
-      //update first prev link
-      head->prev = link;
+      high = link;
+      low = link;
+   }
+
+   //update high || low
+   if(data >= high->data){
+	   high = link;
+   } else if (data <= low->data){
+	   low = link;
    }
 
    //point it to old first link
@@ -177,75 +224,6 @@ void insertFirst(int key, int data) {
    head = link;
 }
 
-//insert link at the last location
-void insertLast(int key, int data) {
-
-   //create a link
-   struct node *link = (struct node*) malloc(sizeof(struct node));
-   link->key = key;
-   link->data = data;
-
-   if(isEmpty()) {
-      //make it the last link
-      last = link;
-   } else {
-      //make link a new last link
-      last->next = link;
-
-      //mark old last node as prev of new link
-      link->prev = last;
-   }
-
-   //point last to new last node
-   last = link;
-}
-
-//delete a link with given key
-
-struct node* delete(int key) {
-
-   //start from the first link
-   struct node* current = head;
-   struct node* previous = NULL;
-
-   //if list is empty
-   if(head == NULL) {
-      return NULL;
-   }
-
-   //navigate through list
-   while(current->key != key) {
-      //if it is last node
-
-      if(current->next == NULL) {
-         return NULL;
-      } else {
-         //store reference to current link
-         previous = current;
-
-         //move to next link
-         current = current->next;
-      }
-   }
-
-   //found a match, update the link
-   if(current == head) {
-      //change first to point to next link
-      head = head->next;
-   } else {
-      //bypass the current link
-      current->prev->next = current->next;
-   }
-
-   if(current == last) {
-      //change last to point to prev link
-      last = current->prev;
-   } else {
-      current->next->prev = current->prev;
-   }
-
-   return current;
-}
 
 /****** VGA display ******/
 
@@ -254,6 +232,7 @@ void GUITask(void *pvParameters){
 	static char freqStrBuf[10];
 	static char rocStrBuf[10];
 	static char thresholdStrBuf[10];
+	static char timeStrBuf[10];
 	//initialize VGA controllers
 	alt_up_pixel_buffer_dma_dev *pixel_buf;
 	pixel_buf = alt_up_pixel_buffer_dma_open_dev(VIDEO_PIXEL_BUFFER_DMA_NAME);
@@ -291,14 +270,25 @@ void GUITask(void *pvParameters){
 
 	alt_up_char_buffer_string(char_buf, "Frequency", 8, 40);
 	alt_up_char_buffer_string(char_buf, "RoC", 8, 42);
+	alt_up_char_buffer_string(char_buf, "Last Time", 8, 44);
+	alt_up_char_buffer_string(char_buf, "Highest Time", 8, 46);
+	alt_up_char_buffer_string(char_buf, "Lowest Time", 30, 46);
 	alt_up_char_buffer_string(char_buf, "RoC Threshold", 30, 40);
 	alt_up_char_buffer_string(char_buf, "System Status", 30, 42);
-	alt_up_char_buffer_string(char_buf, "Last Time", 40, 50);
+//	alt_up_char_buffer_string(char_buf, "AA", 20, 44); //Latest times
+	alt_up_char_buffer_string(char_buf, "AA", 32, 44);
+	alt_up_char_buffer_string(char_buf, "AA", 44, 44);
+	alt_up_char_buffer_string(char_buf, "AA", 56, 44);
+	alt_up_char_buffer_string(char_buf, "AA", 68, 44);
+	alt_up_char_buffer_string(char_buf, "AA", 20, 46); //Highest Times
+	alt_up_char_buffer_string(char_buf, "AA", 42, 46); //Lowest Times
+
 
 
 
 	double freq[100], dfreq[100];
-	int i = 0, j = 0;
+	double time[10] = {0};
+	int i = 0, j = 0, t = 0;
 	Line line_freq, line_roc;
 
 	while(1){
@@ -314,6 +304,23 @@ void GUITask(void *pvParameters){
 			xQueueReceive(deltaFrequencyQueue, dfreq+i, 0);
 			i = ++i % 100;
 		}
+		//Timer Queue
+		int prnt = 0;
+		while(uxQueueMessagesWaiting(timeQueue) != 0){
+		xQueueReceive(timeQueue, time+t, 0);
+		insertFirst(0,time[t]);
+		displayList();
+		displayList_5();
+
+
+//		while (prnt < 10){
+//			printf("Time%d : %.1f\n", prnt,  time[prnt]);
+//			prnt++;
+//		}
+			t = ++t % 10;
+		}
+
+
 
 		switch(currentState) {
 		case NORMAL:
@@ -330,14 +337,15 @@ void GUITask(void *pvParameters){
 		sprintf(freqStrBuf, "%.2f", *(freq+savedI));
 		sprintf(rocStrBuf, "%.2f",  *(dfreq+savedI));
 		sprintf(thresholdStrBuf, "%.2f",  unstableThreshold);
+		sprintf(timeStrBuf, "%f\n",  *(time+(t-1)));
 		//last 5 timer values
-		sprintf(timerStrBuf, "%d ", getFirst());
+		//sprintf(timerStrBuf, "%d ", getFirst());//LL
 		//printf("%.2f\n", unstableThreshold);
 		alt_up_char_buffer_string(char_buf, "            ", 45, 40);
 		alt_up_char_buffer_string(char_buf, freqStrBuf, 20, 40);
 		alt_up_char_buffer_string(char_buf, rocStrBuf, 20, 42);
 		alt_up_char_buffer_string(char_buf, thresholdStrBuf, 45, 40);
-		alt_up_char_buffer_string(char_buf, timerStrBuf, 50, 50);
+		alt_up_char_buffer_string(char_buf, timeStrBuf, 20, 44);//LL
 
 
 		//clear old graph to draw new graph
@@ -480,11 +488,11 @@ void tryTurnOffLoad() {
 				shedState = shedState | (0x1 << i);
 				xSemaphoreGive(loadStateSem);
 				xTime3 = xTaskGetTickCount();
-//				int executiontime = ((int) xTime3 - (int) xTime1);
-				int executiontime = ((int) xTime3);
+				double executiontime = (double)xTime3 - (double)xTime1;
 				if (tst == 0) {
-					insertFirst(1, executiontime);
-					printf("Execution Time: %d ms \n", executiontime);
+					//insertFirst(1, executiontime);//LL
+					printf("Execution Time: %f ms \n", executiontime);
+					xQueueSendToBackFromISR(timeQueue, &executiontime, pdFALSE);
 					tst++;
 				} else { tst++; }
 
@@ -710,6 +718,7 @@ int main()
 	frequencyQueue_out = xQueueCreate(FREQUENCY_QUEUE_SIZE, sizeof(double));
 	deltaFrequencyQueue_out = xQueueCreate(FREQUENCY_QUEUE_SIZE, sizeof(double));
 	eventQueue = xQueueCreate(FREQUENCY_QUEUE_SIZE, sizeof(EventT));
+	timeQueue = xQueueCreate(TIME_QUEUE_SIZE, sizeof(double)); //LL
 	loadStateSem = xSemaphoreCreateBinary();
 	currentStateSem = xSemaphoreCreateBinary();
 	fp = fopen(CHARACTER_LCD_NAME, "w"); //open the character LCD as a file stream for write
@@ -736,7 +745,12 @@ int main()
 //	insertFirst(4, 1);
 //	insertFirst(5, 40);
 //	insertFirst(6, 56);
-//	displayBackward();
+//	insertFirst(6, 0);
+
+	displayList();
+//	freeList();
+	//displayList();
+
 
 	// Start the scheduler
 	vTaskStartScheduler();
