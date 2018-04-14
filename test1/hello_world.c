@@ -128,6 +128,12 @@ void memory() {
    mem = length() * sizeof(struct node);
    printf("\nMemory: %d bytes", mem);
 }
+int memorytmp() {
+   int mem = 0;
+   mem = length() * sizeof(struct node);
+//   printf("\nMemory: %d bytes", mem);
+   return mem;
+}
 
 //display the list from first to last
 void displayList() {
@@ -182,6 +188,42 @@ void displayList_5() {
 
 }
 
+//Get last 5 values. Print on screen
+int getLst() {
+   //start from the last
+   struct node *ptr = last;
+   return ptr->data;
+
+}
+int getHigh() {
+   //start from the last
+   return high->data;
+
+}
+int getLow() {
+   //start from the last
+   return low->data;
+
+}
+
+//Get last 5 values. Print on screen
+int * getLst_5() {
+	static int r[4];
+	//start from the head
+	struct node *ptr = head;
+	//navigate till the 4th
+	int i = 0;
+	while ( i < 5) {
+		//Save to array
+		r[i] = ptr-> data;
+		//move to next item
+		ptr = ptr->next;
+		i++;
+	}
+	return r;
+
+}
+
 
 void freeList() {
 
@@ -206,9 +248,11 @@ void freeList() {
 //insert link at the first location
 void insertFirst(int data) {
 
+//	data = memorytmp(); //enable for testing GUI
    //create a link
    struct node *link = (struct node*) malloc(sizeof(struct node));
    link->data = data;
+
 
    if(isEmpty()) {
       //make it the last link
@@ -235,11 +279,16 @@ void insertFirst(int data) {
 /****** VGA display ******/
 
 void GUITask(void *pvParameters){
-	static char timerStrBuf[10];
 	static char freqStrBuf[10];
 	static char rocStrBuf[10];
 	static char thresholdStrBuf[10];
 	static char timeStrBuf[10];
+	static char timeStrBuf1[10];
+	static char timeStrBuf2[10];
+	static char timeStrBuf3[10];
+	static char timeStrBuf4[10];
+	static char HtimeStrBuf[10];
+	static char LtimeStrBuf[10];
 	//initialize VGA controllers
 	alt_up_pixel_buffer_dma_dev *pixel_buf;
 	pixel_buf = alt_up_pixel_buffer_dma_open_dev(VIDEO_PIXEL_BUFFER_DMA_NAME);
@@ -283,20 +332,21 @@ void GUITask(void *pvParameters){
 	alt_up_char_buffer_string(char_buf, "RoC Threshold", 30, 40);
 	alt_up_char_buffer_string(char_buf, "System Status", 30, 42);
 //	alt_up_char_buffer_string(char_buf, "AA", 20, 44); //Latest times
-	alt_up_char_buffer_string(char_buf, "AA", 32, 44);
-	alt_up_char_buffer_string(char_buf, "AA", 44, 44);
-	alt_up_char_buffer_string(char_buf, "AA", 56, 44);
-	alt_up_char_buffer_string(char_buf, "AA", 68, 44);
-	alt_up_char_buffer_string(char_buf, "AA", 20, 46); //Highest Times
-	alt_up_char_buffer_string(char_buf, "AA", 42, 46); //Lowest Times
+//	alt_up_char_buffer_string(char_buf, "AA", 32, 44);
+//	alt_up_char_buffer_string(char_buf, "AA", 44, 44);
+//	alt_up_char_buffer_string(char_buf, "AA", 56, 44);
+//	alt_up_char_buffer_string(char_buf, "AA", 68, 44);
+//	alt_up_char_buffer_string(char_buf, "AA", 20, 46); //Highest Times
+//	alt_up_char_buffer_string(char_buf, "AA", 42, 46); //Lowest Times
 
 
 
 
 	double freq[100], dfreq[100];
-	double time[10] = {0};
+	int time[10] = {0};
 	int i = 0, j = 0, t = 0;
 	Line line_freq, line_roc;
+	int *p;
 
 	while(1){
 
@@ -342,18 +392,39 @@ void GUITask(void *pvParameters){
 			break;
 		}
 
+		p = getLst_5();
 		sprintf(freqStrBuf, "%.2f", *(freq+savedI));
 		sprintf(rocStrBuf, "%.2f",  *(dfreq+savedI));
 		sprintf(thresholdStrBuf, "%.2f",  unstableThreshold);
-		sprintf(timeStrBuf, "%.2f\n",  *(time+(t-1)));
-		//last 5 timer values
-		//sprintf(timerStrBuf, "%d ", getFirst());//LL
-		//printf("%.2f\n", unstableThreshold);
+		sprintf(timeStrBuf, "%d",  p[0]);
+		sprintf(timeStrBuf1, "%d",  p[1]);
+		sprintf(timeStrBuf2, "%d",  p[2]);
+		sprintf(timeStrBuf3, "%d",  p[3]);
+		sprintf(timeStrBuf4, "%d",  p[4]);
+		sprintf(HtimeStrBuf, "%d", getHigh());
+		sprintf(LtimeStrBuf, "%d",  getLow());
+
 		alt_up_char_buffer_string(char_buf, "            ", 45, 40);
 		alt_up_char_buffer_string(char_buf, freqStrBuf, 20, 40);
 		alt_up_char_buffer_string(char_buf, rocStrBuf, 20, 42);
 		alt_up_char_buffer_string(char_buf, thresholdStrBuf, 45, 40);
 		alt_up_char_buffer_string(char_buf, timeStrBuf, 20, 44);//LL
+		alt_up_char_buffer_string(char_buf, timeStrBuf1, 32, 44);//LL
+		alt_up_char_buffer_string(char_buf, timeStrBuf2, 44, 44);//LL
+		alt_up_char_buffer_string(char_buf, timeStrBuf3, 56, 44);//LL
+		alt_up_char_buffer_string(char_buf, timeStrBuf4, 68, 44);//LL
+		alt_up_char_buffer_string(char_buf, HtimeStrBuf, 20, 46);//LL
+		alt_up_char_buffer_string(char_buf, LtimeStrBuf, 42, 46);//LL
+		sprintf(timeStrBuf, "%d",  000000);
+		sprintf(timeStrBuf1, "%d",  000000);
+		sprintf(timeStrBuf2, "%d",  000000);
+		sprintf(timeStrBuf3, "%d",  000000);
+		sprintf(timeStrBuf4, "%d",  000000);
+		sprintf(HtimeStrBuf, "%d",  000000);
+		sprintf(LtimeStrBuf, "%d",  000000);
+
+
+
 
 
 		//clear old graph to draw new graph
@@ -496,10 +567,10 @@ void tryTurnOffLoad() {
 				shedState = shedState | (0x1 << i);
 				xSemaphoreGive(loadStateSem);
 				xTime3 = xTaskGetTickCount();
-				double executiontime = (double)xTime3 - (double)xTime1;
+				int executiontime = (int)xTime3 - (int)xTime1;
 				if (tst == 0) {
 					//insertFirst(1, executiontime);//LL
-					printf("\nExecution Time: %f ms \n", executiontime);
+					printf("\nExecution Time: %d ms \n", executiontime);
 					xQueueSendToBackFromISR(timeQueue, &executiontime, pdFALSE);
 					tst++;
 				} else { tst++; }
@@ -726,7 +797,7 @@ int main()
 	frequencyQueue_out = xQueueCreate(FREQUENCY_QUEUE_SIZE, sizeof(double));
 	deltaFrequencyQueue_out = xQueueCreate(FREQUENCY_QUEUE_SIZE, sizeof(double));
 	eventQueue = xQueueCreate(FREQUENCY_QUEUE_SIZE, sizeof(EventT));
-	timeQueue = xQueueCreate(TIME_QUEUE_SIZE, sizeof(double)); //LL
+	timeQueue = xQueueCreate(TIME_QUEUE_SIZE, sizeof(int)); //LL
 	loadStateSem = xSemaphoreCreateBinary();
 	currentStateSem = xSemaphoreCreateBinary();
 	fp = fopen(CHARACTER_LCD_NAME, "w"); //open the character LCD as a file stream for write
@@ -767,3 +838,4 @@ int main()
 
   return 0;
 }
+
