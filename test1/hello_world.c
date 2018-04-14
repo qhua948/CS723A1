@@ -89,10 +89,8 @@ static double unstableThreshold = 10.5f;
 //Linked list for Time Values
 struct node {
    int data;
-   int key;
-
    struct node *next;
-//   struct node *prev;
+
 };
 
 typedef struct Line_S{
@@ -124,6 +122,12 @@ int length() {
 
    return length;
 }
+//Return memory of link list in bytes
+void memory() {
+   int mem = 0;
+   mem = length() * sizeof(struct node);
+   printf("\nMemory: %d bytes", mem);
+}
 
 //display the list from first to last
 void displayList() {
@@ -139,18 +143,17 @@ void displayList() {
    while(ptr != last) {
 
       //print data
-      printf("(%d,%d) ",ptr->key,ptr->data);
+      printf("(%d) ",ptr->data);
 
       //move to next item
       ptr = ptr ->next;
 
    }
-   printf("(%d,%d)] ",last->key,last->data);
+
+   printf("(%d)] ",last->data);
    printf("\nLength = %d", length());
    printf("\nHigh: %d", high->data);
    printf("\nLow: %d", low->data);
-//   printf("\nHead: %d", head->data);
-//   printf("\nLast: %d", last->data);
 }
 
 //Get last 5 values. Print on screen
@@ -164,14 +167,15 @@ void displayList_5() {
    while(ptr != last && i < 5) {
 
       //print data
-      printf("(%d,%d) ",ptr->key,ptr->data);
+
+      printf("(%d) ",ptr->data);
 
       //move to next item
       ptr = ptr ->next;
       i++;
    }
    if(length() < 6){
-	   printf("(%d,%d)] ",last->key,last->data);
+	   printf("(%d)] ",last->data);
    }
 
    printf("] ");
@@ -200,11 +204,10 @@ void freeList() {
 
 
 //insert link at the first location
-void insertFirst(int key, int data) {
+void insertFirst(int data) {
 
    //create a link
    struct node *link = (struct node*) malloc(sizeof(struct node));
-   link->key = key;
    link->data = data;
 
    if(isEmpty()) {
@@ -312,9 +315,10 @@ void GUITask(void *pvParameters){
 		int prnt = 0;
 		while(uxQueueMessagesWaiting(timeQueue) != 0){
 		xQueueReceive(timeQueue, time+t, 0);
-		insertFirst(0,time[t]);
+		insertFirst(time[t]);
 		displayList();
 		displayList_5();
+		memory();
 
 
 //		while (prnt < 10){
@@ -341,7 +345,7 @@ void GUITask(void *pvParameters){
 		sprintf(freqStrBuf, "%.2f", *(freq+savedI));
 		sprintf(rocStrBuf, "%.2f",  *(dfreq+savedI));
 		sprintf(thresholdStrBuf, "%.2f",  unstableThreshold);
-		sprintf(timeStrBuf, "%f\n",  *(time+(t-1)));
+		sprintf(timeStrBuf, "%.2f\n",  *(time+(t-1)));
 		//last 5 timer values
 		//sprintf(timerStrBuf, "%d ", getFirst());//LL
 		//printf("%.2f\n", unstableThreshold);
