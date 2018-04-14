@@ -127,13 +127,14 @@ int length() {
 
 //display the list from first to last
 void displayList() {
-	printf("\nHead0: %d", head->data);
-	   printf("\nLast0: %d", last->data);
+//	printf("\nHead0: %d", head->data);
+//	   printf("\nLast0: %d", last->data);
    //start from the last
    struct node *ptr = head;
 
    //navigate till the start of the list
-   printf("\n[ ");
+
+   printf("\nFull List : [ ");
 
    while(ptr != last) {
 
@@ -145,11 +146,11 @@ void displayList() {
 
    }
    printf("(%d,%d)] ",last->key,last->data);
-
+   printf("\nLength = %d", length());
    printf("\nHigh: %d", high->data);
    printf("\nLow: %d", low->data);
-   printf("\nHead: %d", head->data);
-   printf("\nLast: %d", last->data);
+//   printf("\nHead: %d", head->data);
+//   printf("\nLast: %d", last->data);
 }
 
 //Get last 5 values. Print on screen
@@ -169,7 +170,10 @@ void displayList_5() {
       ptr = ptr ->next;
       i++;
    }
-   //printf("(%d,%d)] ",last->key,last->data);
+   if(length() < 6){
+	   printf("(%d,%d)] ",last->key,last->data);
+   }
+
    printf("] ");
 
 }
@@ -491,7 +495,7 @@ void tryTurnOffLoad() {
 				double executiontime = (double)xTime3 - (double)xTime1;
 				if (tst == 0) {
 					//insertFirst(1, executiontime);//LL
-					printf("Execution Time: %f ms \n", executiontime);
+					printf("\nExecution Time: %f ms \n", executiontime);
 					xQueueSendToBackFromISR(timeQueue, &executiontime, pdFALSE);
 					tst++;
 				} else { tst++; }
@@ -747,7 +751,7 @@ int main()
 //	insertFirst(6, 56);
 //	insertFirst(6, 0);
 
-	displayList();
+//	displayList();
 //	freeList();
 	//displayList();
 
