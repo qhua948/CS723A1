@@ -86,7 +86,7 @@ static double unstableThreshold = 10.5f;
 
 #define GUITask_P      (tskIDLE_PRIORITY+1)
 
-//Linked list for Time Values
+/****** Link List For Time Values ******/
 struct node {
    int data;
    struct node *next;
@@ -107,7 +107,6 @@ struct node *high = NULL;
 struct node *low = NULL;
 struct node *current = NULL;
 
-//is list empty
 bool isEmpty() {
    return head == NULL;
 }
@@ -119,22 +118,19 @@ int length() {
    for(current = head; current != NULL; current = current->next){
       length++;
    }
-
    return length;
 }
-//Return memory of link list in bytes
-void memory() {
+
+//Return memory of link list in bytes based on nodes * size
+int memory() {
    int mem = 0;
    mem = length() * sizeof(struct node);
-   printf("\nMemory: %d bytes", mem);
-}
-int memorytmp() {
-   int mem = 0;
-   mem = length() * sizeof(struct node);
+//   if (mem > 24 ){mem = 0; } //Testing
 //   printf("\nMemory: %d bytes", mem);
    return mem;
 }
 
+//TODO : Waste of two functions. Combine
 //display the list from first to last
 void displayList() {
 //	printf("\nHead0: %d", head->data);
@@ -162,11 +158,10 @@ void displayList() {
    printf("\nLow: %d", low->data);
 }
 
-//Get last 5 values. Print on screen
+//Get last 5 values. Print on console
 void displayList_5() {
    //start from the last
    struct node *ptr = head;
-
    //navigate till the start of the list
    printf("\nLast 5: [ ");
    int i = 0;
@@ -183,12 +178,11 @@ void displayList_5() {
    if(length() < 6){
 	   printf("(%d)] ",last->data);
    }
-
    printf("] ");
 
 }
 
-//Get last 5 values. Print on screen
+//Get last value in LL
 int getLst() {
    //start from the last
    struct node *ptr = last;
@@ -224,18 +218,14 @@ int * getLst_5() {
 
 }
 
-
+//TODO : Do we want to use this?
 void freeList() {
-
    //start from the head
    struct node *ptr = head;
    struct node *followptr;
-
    //navigate till the start of the list
    printf("\n[ ");
-
    while(ptr != last) {
-
 	  followptr = ptr;
 	  ptr = ptr->next;
 	  printf("\n Delete: %d", ptr->data);
@@ -247,13 +237,12 @@ void freeList() {
 
 //insert link at the first location
 void insertFirst(int data) {
+//	enable for testing GUI
+	data = memory();
 
-//	data = memorytmp(); //enable for testing GUI
    //create a link
    struct node *link = (struct node*) malloc(sizeof(struct node));
    link->data = data;
-
-
    if(isEmpty()) {
       //make it the last link
       last = link;
@@ -268,10 +257,8 @@ void insertFirst(int data) {
 	   low = link;
    }
 
-   //point it to old first link
+   //Update new first link and previous
    link->next = head;
-
-   //point first to new first link
    head = link;
 }
 
@@ -331,16 +318,6 @@ void GUITask(void *pvParameters){
 	alt_up_char_buffer_string(char_buf, "Lowest Time", 30, 46);
 	alt_up_char_buffer_string(char_buf, "RoC Threshold", 30, 40);
 	alt_up_char_buffer_string(char_buf, "System Status", 30, 42);
-//	alt_up_char_buffer_string(char_buf, "AA", 20, 44); //Latest times
-//	alt_up_char_buffer_string(char_buf, "AA", 32, 44);
-//	alt_up_char_buffer_string(char_buf, "AA", 44, 44);
-//	alt_up_char_buffer_string(char_buf, "AA", 56, 44);
-//	alt_up_char_buffer_string(char_buf, "AA", 68, 44);
-//	alt_up_char_buffer_string(char_buf, "AA", 20, 46); //Highest Times
-//	alt_up_char_buffer_string(char_buf, "AA", 42, 46); //Lowest Times
-
-
-
 
 	double freq[100], dfreq[100];
 	int time[10] = {0};
@@ -362,23 +339,16 @@ void GUITask(void *pvParameters){
 			i = ++i % 100;
 		}
 		//Timer Queue
-		int prnt = 0;
 		while(uxQueueMessagesWaiting(timeQueue) != 0){
 		xQueueReceive(timeQueue, time+t, 0);
 		insertFirst(time[t]);
-		displayList();
-		displayList_5();
-		memory();
 
+		//Debugging:
+//		displayList();
+//		displayList_5();
+//		memory();
 
-//		while (prnt < 10){
-//			printf("Time%d : %.1f\n", prnt,  time[prnt]);
-//			prnt++;
-//		}
-			t = ++t % 10;
 		}
-
-
 
 		switch(currentState) {
 		case NORMAL:
@@ -396,6 +366,7 @@ void GUITask(void *pvParameters){
 		sprintf(freqStrBuf, "%.2f", *(freq+savedI));
 		sprintf(rocStrBuf, "%.2f",  *(dfreq+savedI));
 		sprintf(thresholdStrBuf, "%.2f",  unstableThreshold);
+		//TODO : Combine into fewer buffers
 		sprintf(timeStrBuf, "%d",  p[0]);
 		sprintf(timeStrBuf1, "%d",  p[1]);
 		sprintf(timeStrBuf2, "%d",  p[2]);
@@ -408,20 +379,14 @@ void GUITask(void *pvParameters){
 		alt_up_char_buffer_string(char_buf, freqStrBuf, 20, 40);
 		alt_up_char_buffer_string(char_buf, rocStrBuf, 20, 42);
 		alt_up_char_buffer_string(char_buf, thresholdStrBuf, 45, 40);
-		alt_up_char_buffer_string(char_buf, timeStrBuf, 20, 44);//LL
-		alt_up_char_buffer_string(char_buf, timeStrBuf1, 32, 44);//LL
-		alt_up_char_buffer_string(char_buf, timeStrBuf2, 44, 44);//LL
-		alt_up_char_buffer_string(char_buf, timeStrBuf3, 56, 44);//LL
-		alt_up_char_buffer_string(char_buf, timeStrBuf4, 68, 44);//LL
-		alt_up_char_buffer_string(char_buf, HtimeStrBuf, 20, 46);//LL
-		alt_up_char_buffer_string(char_buf, LtimeStrBuf, 42, 46);//LL
-		sprintf(timeStrBuf, "%d",  000000);
-		sprintf(timeStrBuf1, "%d",  000000);
-		sprintf(timeStrBuf2, "%d",  000000);
-		sprintf(timeStrBuf3, "%d",  000000);
-		sprintf(timeStrBuf4, "%d",  000000);
-		sprintf(HtimeStrBuf, "%d",  000000);
-		sprintf(LtimeStrBuf, "%d",  000000);
+		alt_up_char_buffer_string(char_buf, timeStrBuf, 20, 44);
+		alt_up_char_buffer_string(char_buf, timeStrBuf1, 32, 44);
+		alt_up_char_buffer_string(char_buf, timeStrBuf2, 44, 44);
+		alt_up_char_buffer_string(char_buf, timeStrBuf3, 56, 44);
+		alt_up_char_buffer_string(char_buf, timeStrBuf4, 68, 44);
+		alt_up_char_buffer_string(char_buf, HtimeStrBuf, 20, 46);
+		alt_up_char_buffer_string(char_buf, LtimeStrBuf, 42, 46);
+		//TODO : Clear Timer Buffers
 
 
 
@@ -695,18 +660,7 @@ void pushButtonIsr() {
         */
 	return;
 }
-//int hexadecimal_to_decimal(int x)
-//{
-//      int decimal_number, remainder, count = 0;
-//      while(x > 0)
-//      {
-//            remainder = x % 10;
-//            decimal_number = decimal_number + remainder * pow(16, count);
-//            x = x / 10;
-//            count++;
-//      }
-//      return decimal_number;
-//}
+
 
 static unsigned short afterDec = 0;
 static unsigned int decPt = 0;
@@ -817,14 +771,6 @@ int main()
 	xTaskCreate(updateLEDTask, "UpdateLEDTask", 4096, NULL, 30, NULL);
 	xTaskCreate(eventConsumerTask, "EventConsumerTask", 4096, NULL, 30, NULL);
 	xTaskCreate(GUITask, "GUITask", 8192, NULL, 29, NULL);
-
-//	insertFirst(1, 10);
-//	insertFirst(2, 20);
-//	insertFirst(3, 30);
-//	insertFirst(4, 1);
-//	insertFirst(5, 40);
-//	insertFirst(6, 56);
-//	insertFirst(6, 0);
 
 //	displayList();
 //	freeList();
