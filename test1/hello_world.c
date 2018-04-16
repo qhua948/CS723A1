@@ -43,7 +43,7 @@ static SemaphoreHandle_t currentStateSem;
 static unsigned short ps2ISRState = 2;
 static float usrps2InputBuf = .0;
 
-TickType_t xTime1, xTime2, xTime3;
+TickType_t xTime1, xTime2, xTime3,xTime4;
 int tst = 0;
 
 
@@ -238,7 +238,7 @@ void freeList() {
 //insert link at the first location
 void insertFirst(int data) {
 //	enable for testing GUI
-	data = memory();
+	data = memory() % 28;
 
    //create a link
    struct node *link = (struct node*) malloc(sizeof(struct node));
@@ -367,6 +367,7 @@ void GUITask(void *pvParameters){
 		sprintf(rocStrBuf, "%.2f",  *(dfreq+savedI));
 		sprintf(thresholdStrBuf, "%.2f",  unstableThreshold);
 		//TODO : Combine into fewer buffers
+
 		sprintf(timeStrBuf, "%d",  p[0]);
 		sprintf(timeStrBuf1, "%d",  p[1]);
 		sprintf(timeStrBuf2, "%d",  p[2]);
@@ -379,6 +380,17 @@ void GUITask(void *pvParameters){
 		alt_up_char_buffer_string(char_buf, freqStrBuf, 20, 40);
 		alt_up_char_buffer_string(char_buf, rocStrBuf, 20, 42);
 		alt_up_char_buffer_string(char_buf, thresholdStrBuf, 45, 40);
+
+		//Timer GUI
+
+		//Clear All values
+		alt_up_char_buffer_string(char_buf, "          ", 20, 44);
+		alt_up_char_buffer_string(char_buf, "          ", 32, 44);
+		alt_up_char_buffer_string(char_buf, "          ", 44, 44);
+		alt_up_char_buffer_string(char_buf, "          ", 56, 44);
+		alt_up_char_buffer_string(char_buf, "          ", 68, 44);
+		alt_up_char_buffer_string(char_buf, "          ", 20, 46);
+		alt_up_char_buffer_string(char_buf, "          ", 42, 46);
 		alt_up_char_buffer_string(char_buf, timeStrBuf, 20, 44);
 		alt_up_char_buffer_string(char_buf, timeStrBuf1, 32, 44);
 		alt_up_char_buffer_string(char_buf, timeStrBuf2, 44, 44);
@@ -386,7 +398,8 @@ void GUITask(void *pvParameters){
 		alt_up_char_buffer_string(char_buf, timeStrBuf4, 68, 44);
 		alt_up_char_buffer_string(char_buf, HtimeStrBuf, 20, 46);
 		alt_up_char_buffer_string(char_buf, LtimeStrBuf, 42, 46);
-		//TODO : Clear Timer Buffers
+
+
 
 
 
@@ -470,12 +483,14 @@ void freqIsr(){
 	} else if(currentState == NORMAL) {
 		if(freq < unstableInstantThreshold || deltaFreq > unstableThreshold) {
 			xTime1 = xTaskGetTickCount();
+			printf("\n%d", xTime1);
 			tst = 0;
 			// Normal state and unstable
 			currentState = MANAGED;
 			xTimerStartFromISR(timer, 0);
 			// Send a SHED Event to the consumer
 			xQueueSendToBackFromISR(eventQueue, &SHED_EVENT, NULL);
+
 		}
 	}
 
@@ -490,7 +505,9 @@ void freqIsr(){
 		fprintf(fp, "%c%sMAINTEANCE\nFreq:%.2f\n", esc, "[2J", unstableThreshold);
 		break;
 	}
+
         xSemaphoreGiveFromISR(currentStateSem, 0);
+
 	return;
 }
 
@@ -521,7 +538,8 @@ unsigned int tryTurnOnLoad() {
 
 // Analogous to tryTurnOnLoad(), thread safe
 void tryTurnOffLoad() {
-	//xTime3 = xTaskGetTickCount();
+	xTime3 = xTaskGetTickCount();
+    printf("\nTime 3 %d",xTime3);
 	xSemaphoreTake(loadStateSem, 1000);
 	unsigned int maskedState = loadState & EFFECTIVE_SWITCHES_MASK;
 	if(maskedState != 0x0) {
@@ -530,9 +548,13 @@ void tryTurnOffLoad() {
 			if((maskedState & (0x1 << i)) != 0x0) {
 				loadState = maskedState ^ (0x1 << i);
 				shedState = shedState | (0x1 << i);
+//				xTime3 = xTaskGetTickCount();
+			    xTime4 = xTaskGetTickCount();
+			    printf("\nTime 4: %d",xTime4);
 				xSemaphoreGive(loadStateSem);
-				xTime3 = xTaskGetTickCount();
-				int executiontime = (int)xTime3 - (int)xTime1;
+
+
+				int executiontime = xTime3 - xTime1;
 				if (tst == 0) {
 					//insertFirst(1, executiontime);//LL
 					printf("\nExecution Time: %d ms \n", executiontime);
@@ -745,6 +767,8 @@ int main()
 	alt_up_ps2_enable_read_interrupt(ps2_device);
 	alt_up_ps2_clear_fifo (ps2_device);
 
+
+
 	// Create the necessary data structures
 	frequencyQueue = xQueueCreate(FREQUENCY_QUEUE_SIZE, sizeof(double));
 	deltaFrequencyQueue = xQueueCreate(FREQUENCY_QUEUE_SIZE, sizeof(double));
@@ -772,9 +796,9 @@ int main()
 	xTaskCreate(eventConsumerTask, "EventConsumerTask", 4096, NULL, 30, NULL);
 	xTaskCreate(GUITask, "GUITask", 8192, NULL, 29, NULL);
 
-//	displayList();
-//	freeList();
-	//displayList();
+	//Cleafr
+//	freelist();
+
 	xTime1 = 0;
 	xTime3 = 0;
 
