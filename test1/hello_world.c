@@ -775,7 +775,8 @@ int main()
 //	displayList();
 //	freeList();
 	//displayList();
-
+	xTime1 = 0;
+	xTime3 = 0;
 
 	// Start the scheduler
 	vTaskStartScheduler();
@@ -784,4 +785,3 @@ int main()
 
   return 0;
 }
-
