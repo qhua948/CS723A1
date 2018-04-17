@@ -202,7 +202,7 @@ int getLow() {
 
 //Get last 5 values. Print on screen
 int * getLst_5() {
-	static int r[4];
+	static int r[5];
 	//start from the head
 	struct node *ptr = head;
 	//navigate till the 4th
@@ -270,10 +270,6 @@ void GUITask(void *pvParameters){
 	static char rocStrBuf[10];
 	static char thresholdStrBuf[10];
 	static char timeStrBuf[10];
-	static char timeStrBuf1[10];
-	static char timeStrBuf2[10];
-	static char timeStrBuf3[10];
-	static char timeStrBuf4[10];
 	static char HtimeStrBuf[10];
 	static char LtimeStrBuf[10];
 	//initialize VGA controllers
@@ -366,36 +362,26 @@ void GUITask(void *pvParameters){
 		sprintf(freqStrBuf, "%.2f", *(freq+savedI));
 		sprintf(rocStrBuf, "%.2f",  *(dfreq+savedI));
 		sprintf(thresholdStrBuf, "%.2f",  unstableThreshold);
-		//TODO : Combine into fewer buffers
 
-		sprintf(timeStrBuf, "%d",  p[0]);
-		sprintf(timeStrBuf1, "%d",  p[1]);
-		sprintf(timeStrBuf2, "%d",  p[2]);
-		sprintf(timeStrBuf3, "%d",  p[3]);
-		sprintf(timeStrBuf4, "%d",  p[4]);
 		sprintf(HtimeStrBuf, "%d", getHigh());
 		sprintf(LtimeStrBuf, "%d",  getLow());
 
+		alt_up_char_buffer_string(char_buf, "            ", 68, 44);
 		alt_up_char_buffer_string(char_buf, "            ", 45, 40);
 		alt_up_char_buffer_string(char_buf, freqStrBuf, 20, 40);
 		alt_up_char_buffer_string(char_buf, rocStrBuf, 20, 42);
 		alt_up_char_buffer_string(char_buf, thresholdStrBuf, 45, 40);
 
 		//Timer GUI
-
+		int l = 0;
+		while (l < 5)	{
+			int xpostmp = 20 + (l * 12);
+			sprintf(timeStrBuf, "%d",  p[l]);
+			alt_up_char_buffer_string(char_buf, "           ", xpostmp, 44);
+			alt_up_char_buffer_string(char_buf, timeStrBuf, xpostmp, 44);
+			l++;
+		}
 		//Clear All values
-		alt_up_char_buffer_string(char_buf, "          ", 20, 44);
-		alt_up_char_buffer_string(char_buf, "          ", 32, 44);
-		alt_up_char_buffer_string(char_buf, "          ", 44, 44);
-		alt_up_char_buffer_string(char_buf, "          ", 56, 44);
-		alt_up_char_buffer_string(char_buf, "          ", 68, 44);
-		alt_up_char_buffer_string(char_buf, "          ", 20, 46);
-		alt_up_char_buffer_string(char_buf, "          ", 42, 46);
-		alt_up_char_buffer_string(char_buf, timeStrBuf, 20, 44);
-		alt_up_char_buffer_string(char_buf, timeStrBuf1, 32, 44);
-		alt_up_char_buffer_string(char_buf, timeStrBuf2, 44, 44);
-		alt_up_char_buffer_string(char_buf, timeStrBuf3, 56, 44);
-		alt_up_char_buffer_string(char_buf, timeStrBuf4, 68, 44);
 		alt_up_char_buffer_string(char_buf, HtimeStrBuf, 20, 46);
 		alt_up_char_buffer_string(char_buf, LtimeStrBuf, 42, 46);
 
