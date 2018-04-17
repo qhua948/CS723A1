@@ -43,7 +43,7 @@ static SemaphoreHandle_t currentStateSem;
 static unsigned short ps2ISRState = 2;
 static float usrps2InputBuf = .0;
 
-TickType_t xTime1, xTime2, xTime3,xTime4;
+TickType_t xTime1, xTime3;
 int tst = 0;
 
 
@@ -125,16 +125,12 @@ int length() {
 int memory() {
    int mem = 0;
    mem = length() * sizeof(struct node);
-//   if (mem > 24 ){mem = 0; } //Testing
-//   printf("\nMemory: %d bytes", mem);
    return mem;
 }
 
-//TODO : Waste of two functions. Combine
 //display the list from first to last
 void displayList() {
-//	printf("\nHead0: %d", head->data);
-//	   printf("\nLast0: %d", last->data);
+
    //start from the last
    struct node *ptr = head;
 
@@ -218,7 +214,7 @@ int * getLst_5() {
 
 }
 
-//TODO : Do we want to use this?
+
 void freeList() {
    //start from the head
    struct node *ptr = head;
@@ -358,11 +354,10 @@ void GUITask(void *pvParameters){
 			break;
 		}
 
-		p = getLst_5();
 		sprintf(freqStrBuf, "%.2f", *(freq+savedI));
 		sprintf(rocStrBuf, "%.2f",  *(dfreq+savedI));
 		sprintf(thresholdStrBuf, "%.2f",  unstableThreshold);
-  
+
 		sprintf(HtimeStrBuf, "%d", getHigh());
 		sprintf(LtimeStrBuf, "%d",  getLow());
 
@@ -373,6 +368,9 @@ void GUITask(void *pvParameters){
 		alt_up_char_buffer_string(char_buf, thresholdStrBuf, 45, 40);
 
 		//Timer GUI
+		//Last 5 timer values
+		p = getLst_5();
+		//Update values on Gui
 		int l = 0;
 		while (l < 5)	{
 			int xpostmp = 20 + (l * 12);
@@ -381,14 +379,8 @@ void GUITask(void *pvParameters){
 			alt_up_char_buffer_string(char_buf, timeStrBuf, xpostmp, 44);
 			l++;
 		}
-		//Clear All values
 		alt_up_char_buffer_string(char_buf, HtimeStrBuf, 20, 46);
 		alt_up_char_buffer_string(char_buf, LtimeStrBuf, 42, 46);
-
-
-
-
-
 
 
 		//clear old graph to draw new graph
@@ -469,7 +461,6 @@ void freqIsr(){
 	} else if(currentState == NORMAL) {
 		if(freq < unstableInstantThreshold || deltaFreq > unstableThreshold) {
 			xTime1 = xTaskGetTickCount();
-			printf("\n%d", xTime1);
 			tst = 0;
 			// Normal state and unstable
 			currentState = MANAGED;
@@ -524,8 +515,6 @@ unsigned int tryTurnOnLoad() {
 
 // Analogous to tryTurnOnLoad(), thread safe
 void tryTurnOffLoad() {
-	xTime3 = xTaskGetTickCount();
-    printf("\nTime 3 %d",xTime3);
 	xSemaphoreTake(loadStateSem, 1000);
 	unsigned int maskedState = loadState & EFFECTIVE_SWITCHES_MASK;
 	if(maskedState != 0x0) {
@@ -534,15 +523,12 @@ void tryTurnOffLoad() {
 			if((maskedState & (0x1 << i)) != 0x0) {
 				loadState = maskedState ^ (0x1 << i);
 				shedState = shedState | (0x1 << i);
-//				xTime3 = xTaskGetTickCount();
-			    xTime4 = xTaskGetTickCount();
-			    printf("\nTime 4: %d",xTime4);
+				xTime3 = xTaskGetTickCount();
 				xSemaphoreGive(loadStateSem);
 
 
 				int executiontime = xTime3 - xTime1;
 				if (tst == 0) {
-					//insertFirst(1, executiontime);//LL
 					printf("\nExecution Time: %d ms \n", executiontime);
 					xQueueSendToBackFromISR(timeQueue, &executiontime, pdFALSE);
 					tst++;
@@ -655,17 +641,7 @@ void userSwitchMonitorTask(void *param) {
 void pushButtonIsr() {
 	xQueueSendToBackFromISR(eventQueue, &MAINTAIN_EVENT, 0);
 	IOWR_ALTERA_AVALON_PIO_EDGE_CAP(PUSH_BUTTON_BASE, 0x7); //write 1 to clear all detected falling edges
-	/*
-        xSemaphoreTakeFromISR(currentStateSem, 1000);
-        if(currentState == MAINENANCE) {
-            currentState = NORMAL;
-            xTimerStart(timer, 10);
-        } else {
-            currentState = MAINENANCE;
-            xTimerStop(timer, 0);
-        }
-        xSemaphoreGiveFromISR(currentStateSem, 0);
-        */
+
 	return;
 }
 
@@ -703,7 +679,6 @@ void ps2_isr(void* ps2_device, alt_u32 id){
 		// dot
 		afterDec = 1;
 	} else if(offsetChar >= 0 && offsetChar < 10) {
-		// num
 		if(afterDec) {
 			decPt++;
 		}
@@ -775,18 +750,14 @@ int main()
 	alt_irq_register(PS2_IRQ, ps2_device, ps2_isr);
 
     // Create Tasks
-	//xTaskCreate(GUITask, "DrawTsk", configMINIMAL_STACK_SIZE, NULL, GUITask_P, &GUITask_H);
-	//xTaskCreate(frequencyCalculationTask, "FreqCalcTask", configMINIMAL_STACK_SIZE, NULL, 31, NULL);
+
 	xTaskCreate(userSwitchMonitorTask, "UsrSwitchMonTask", 4096, NULL, 31, NULL);
 	xTaskCreate(updateLEDTask, "UpdateLEDTask", 4096, NULL, 30, NULL);
 	xTaskCreate(eventConsumerTask, "EventConsumerTask", 4096, NULL, 30, NULL);
 	xTaskCreate(GUITask, "GUITask", 8192, NULL, 29, NULL);
 
-	//Cleafr
+	//Free link list
 //	freelist();
-
-	xTime1 = 0;
-	xTime3 = 0;
 
 	// Start the scheduler
 	vTaskStartScheduler();
