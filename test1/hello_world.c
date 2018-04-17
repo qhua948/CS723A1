@@ -362,7 +362,7 @@ void GUITask(void *pvParameters){
 		sprintf(freqStrBuf, "%.2f", *(freq+savedI));
 		sprintf(rocStrBuf, "%.2f",  *(dfreq+savedI));
 		sprintf(thresholdStrBuf, "%.2f",  unstableThreshold);
-
+  
 		sprintf(HtimeStrBuf, "%d", getHigh());
 		sprintf(LtimeStrBuf, "%d",  getLow());
 
